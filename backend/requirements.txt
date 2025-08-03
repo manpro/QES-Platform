@@ -64,7 +64,7 @@ numpy==1.24.4
 scikit-image==0.22.0
 
 # Advanced biometric verification
-mediapipe==0.10.8
+mediapipe==0.10.21
 dlib==19.24.2
 tensorflow==2.15.0
 scipy==1.11.4
