@@ -183,7 +183,8 @@ async def health_check():
 
 
 # Include routers
-from api import documents, signatures, audit, document_verification, tsa, tsa_advanced, performance, biometric, blockchain, billing, usage, metrics, eu_dss_api
+from api import documents, signatures, audit, document_verification, tsa, tsa_advanced, performance, biometric, blockchain, billing, usage, metrics, eu_dss_api, cache_management
+from api.webhooks import document_verification as doc_verification_webhooks
 from auth.routes import router as auth_router
 # Include API routes
 app.include_router(auth_router, prefix="/auth")
@@ -194,12 +195,14 @@ app.include_router(document_verification.router, prefix="/api/v1/document-verifi
 app.include_router(tsa.router, prefix="/api/v1/tsa")
 app.include_router(tsa_advanced.router, prefix="/api/v1/tsa-advanced")
 app.include_router(eu_dss_api.router, prefix="/api/v1/eu-dss")
+app.include_router(doc_verification_webhooks.router, prefix="/api/v1/webhooks/document-verification")
 app.include_router(performance.router, prefix="/api/v1/performance")
 app.include_router(biometric.router, prefix="/api/v1/biometric")
 app.include_router(blockchain.router, prefix="/api/v1/blockchain")
 app.include_router(billing.router, prefix="/api/v1/billing")
 app.include_router(usage.router, prefix="/api/v1/usage")
 app.include_router(metrics.router, prefix="/api/v1/metrics")
+app.include_router(cache_management.router, prefix="/api/v1/cache")
 
 
 if __name__ == "__main__":

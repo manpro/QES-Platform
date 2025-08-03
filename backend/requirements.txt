@@ -102,3 +102,15 @@ lxml==4.9.3
 xmlsec==1.3.13
 pyOpenSSL==23.3.0
 xmlschema==2.5.0
+
+# Professional Document Verification APIs
+onfido==2.3.0
+jumio-python==1.2.0
+idnow-sdk==1.0.5
+veriff==2.1.0
+
+# Redis caching and session management
+redis==5.0.1
+redis-py-cluster==2.1.3
+hiredis==2.2.3
+aioredis==2.0.1

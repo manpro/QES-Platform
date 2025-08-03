@@ -212,6 +212,19 @@ docker-compose exec postgres psql -U qes_admin -d qes_platform
 - `POST /api/v1/eu-dss/upload-and-sign` - Upload and sign in one operation
 - `GET /api/v1/eu-dss/signature-levels` - Get supported signature levels
 
+**✅ Advanced Document Verification:**
+- `POST /api/v1/document-verification/verify` - Smart document verification (internal + external)
+- `POST /api/v1/document-verification/verify-external` - Force external provider verification
+- `GET /api/v1/document-verification/providers` - List available verification providers
+- `GET /api/v1/document-verification/health/external` - External provider health check
+
+**✅ Redis Cache Management:**
+- `GET /api/v1/cache/stats` - Comprehensive cache statistics and performance metrics
+- `GET /api/v1/cache/health` - Cache health check and diagnostics
+- `POST /api/v1/cache/invalidate` - Selective cache invalidation by provider/pattern
+- `GET /api/v1/cache/certificates` - List cached certificates with metadata
+- `GET /api/v1/cache/memory-usage` - Detailed memory usage analysis
+
 2. **Implement Database Models**
    - `Document` model (id, name, content_hash, user_id, created_at)
    - `Signature` model (id, document_id, status, provider, certificate_info)

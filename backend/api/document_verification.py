@@ -19,6 +19,10 @@ from models.user import User
 from core.eidas_al2 import (
     DocumentVerifier, AL2Config, AL2DocumentType, AL2IdentityDocument
 )
+from core.external_document_verifiers import (
+    ExternalDocumentVerificationService, DocumentVerificationRequest as ExtDocRequest,
+    DocumentType as ExtDocType, DocumentVerificationProvider
+)
 from datetime import datetime
 import uuid
 from utils.request_utils import get_client_ip, get_user_agent
@@ -32,6 +36,10 @@ class DocumentVerificationRequest(BaseModel):
     """Request for document verification"""
     document_type: str = Field(..., description="Type of document (passport, national_id, driving_license, residence_permit)")
     applicant_name: Optional[str] = Field(None, description="Expected applicant name for cross-validation")
+    country_code: Optional[str] = Field(None, description="Document issuing country code (e.g., 'SE', 'DE', 'FR')")
+    provider: Optional[str] = Field(None, description="Preferred verification provider (onfido, jumio, idnow, veriff)")
+    enable_liveness_check: bool = Field(True, description="Enable liveness detection")
+    enable_face_comparison: bool = Field(True, description="Enable face comparison with document photo")
 
 
 class DocumentVerificationResponse(BaseModel):
@@ -60,7 +68,7 @@ class DocumentAnalysisResponse(BaseModel):
     confidence_scores: Dict[str, float]
 
 
-# Initialize document verifier
+# Initialize document verifier (legacy internal)
 doc_verifier = DocumentVerifier(AL2Config(
     enable_video_verification=True,
     enable_biometric_verification=True,
@@ -68,6 +76,51 @@ doc_verifier = DocumentVerifier(AL2Config(
     risk_threshold=0.3,
     session_timeout_minutes=30
 ))
+
+# Initialize external document verification service
+import os
+external_doc_config = {
+    "default_provider": os.getenv("DOC_VERIFICATION_DEFAULT_PROVIDER", "onfido"),
+    "fallback_provider": os.getenv("DOC_VERIFICATION_FALLBACK_PROVIDER", "jumio"),
+    
+    "onfido": {
+        "enabled": os.getenv("ONFIDO_ENABLED", "true").lower() == "true",
+        "api_key": os.getenv("ONFIDO_API_KEY", ""),
+        "base_url": os.getenv("ONFIDO_BASE_URL", "https://api.onfido.com/v3.6"),
+        "webhook_url": os.getenv("ONFIDO_WEBHOOK_URL", "")
+    },
+    
+    "jumio": {
+        "enabled": os.getenv("JUMIO_ENABLED", "true").lower() == "true",
+        "api_key": os.getenv("JUMIO_API_KEY", ""),
+        "api_secret": os.getenv("JUMIO_API_SECRET", ""),
+        "base_url": os.getenv("JUMIO_BASE_URL", "https://api.jumio.com"),
+        "webhook_url": os.getenv("JUMIO_WEBHOOK_URL", "")
+    },
+    
+    "idnow": {
+        "enabled": os.getenv("IDNOW_ENABLED", "false").lower() == "true",
+        "api_key": os.getenv("IDNOW_API_KEY", ""),
+        "company_id": os.getenv("IDNOW_COMPANY_ID", ""),
+        "base_url": os.getenv("IDNOW_BASE_URL", "https://api.idnow.de"),
+        "webhook_url": os.getenv("IDNOW_WEBHOOK_URL", "")
+    },
+    
+    "veriff": {
+        "enabled": os.getenv("VERIFF_ENABLED", "false").lower() == "true",
+        "api_key": os.getenv("VERIFF_API_KEY", ""),
+        "api_secret": os.getenv("VERIFF_API_SECRET", ""),
+        "base_url": os.getenv("VERIFF_BASE_URL", "https://stationapi.veriff.com"),
+        "webhook_url": os.getenv("VERIFF_WEBHOOK_URL", "")
+    }
+}
+
+# Initialize external service if any provider is enabled
+external_doc_service = None
+if any(provider_config.get("enabled", False) for provider_config in external_doc_config.values() if isinstance(provider_config, dict)):
+    external_doc_service = ExternalDocumentVerificationService(external_doc_config)
+else:
+    logger.info("No external document verification providers configured - using internal verification only")
 
 # Initialize audit logger
 audit_logger = AuditLogger({
@@ -84,6 +137,10 @@ async def verify_document(
     request: Request,
     document_type: str = Form(...),
     applicant_name: Optional[str] = Form(None),
+    country_code: Optional[str] = Form(None),
+    provider: Optional[str] = Form(None),
+    enable_liveness_check: bool = Form(True),
+    enable_face_comparison: bool = Form(True),
     front_image: UploadFile = File(..., description="Front side of identity document"),
     back_image: Optional[UploadFile] = File(None, description="Back side of identity document (if applicable)"),
     current_user: User = Depends(get_current_user),
@@ -146,8 +203,22 @@ async def verify_document(
             back_image=back_image_data
         )
         
-        # Perform verification
-        verification_result = await doc_verifier.verify_document(document)
+        # Determine verification method
+        use_external_provider = external_doc_service and (
+            provider or 
+            os.getenv("PREFER_EXTERNAL_VERIFICATION", "true").lower() == "true"
+        )
+        
+        if use_external_provider:
+            # Use external document verification service
+            verification_result = await _verify_with_external_provider(
+                front_image_data, back_image_data, document_type, 
+                applicant_name, country_code, provider, 
+                enable_liveness_check, enable_face_comparison
+            )
+        else:
+            # Fallback to internal verification
+            verification_result = await doc_verifier.verify_document(document)
         
         # Calculate overall score
         quality_weight = 0.2
@@ -188,17 +259,21 @@ async def verify_document(
             }
         )
         
-        logger.info(f"Document verification completed for user {current_user.id}: {document_id} - Score: {overall_score:.2f}")
+        logger.info(f"Document verification completed for user {current_user.id}: {document_id} - Score: {overall_score:.2f} - Method: {'external' if use_external_provider else 'internal'}")
         
         response = DocumentVerificationResponse(
-            verification_id=document_id,
+            verification_id=verification_result.get("verification_id", document_id),
             authentic=verification_result.get("authentic", False),
             consistent=verification_result.get("consistent", False),
             not_expired=verification_result.get("not_expired", True),
             quality_score=verification_result.get("quality_score", 0.0),
             extracted_data=verification_result.get("extracted_data", {}),
             security_features=verification_result.get("security_features", {}),
-            processing_metadata=verification_result.get("processing_metadata", {}),
+            processing_metadata=verification_result.get("processing_metadata", {
+                "verification_method": "external" if use_external_provider else "internal",
+                "provider_used": verification_result.get("provider", "internal"),
+                "processing_time_ms": verification_result.get("processing_time_ms", 0)
+            }),
             overall_score=overall_score
         )
         
