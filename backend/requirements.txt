@@ -70,7 +70,7 @@ tensorflow==2.15.0
 scipy==1.11.4
 
 # Configuration
-python-dotenv==1.0.0
+python-dotenv==1.1.1
 
 # ASN.1 processing for RFC 3161 TSA
 pyasn1==0.5.1
