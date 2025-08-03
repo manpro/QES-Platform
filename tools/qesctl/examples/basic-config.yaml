@@ -1,0 +1,48 @@
+# Basic QES Platform Configuration Example
+# This file shows a minimal configuration for qesctl
+
+# QES Platform API connection
+api_url: https://api.qes-platform.com/v1
+tenant_id: your-tenant-id
+api_key: your-api-key
+
+# Provider configurations (optional)
+providers: {}
+
+# Global settings
+settings:
+  # Default signature format for new signatures
+  default_signature_format: PAdES-LTA
+  
+  # Default timeout for API requests
+  timeout: 30s
+  
+  # Enable verbose logging
+  verbose: false
+  
+  # Rate limiting settings
+  rate_limiting:
+    enabled: true
+    default_tier: professional
+  
+  # Audit logging settings
+  audit_logging:
+    enabled: true
+    destinations:
+      - loki
+      - postgresql
+    retention: 7y
+  
+  # GDPR compliance settings
+  gdpr:
+    enabled: true
+    data_retention:
+      user_logs: 3y
+      signatures: 10y
+      personal_data: until-deletion+30d
+  
+  # Security settings
+  security:
+    tls_verify: true
+    min_tls_version: "1.2"
+    certificate_validation_level: qualified

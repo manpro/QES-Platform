@@ -1,0 +1,45 @@
+apiVersion: v2
+name: qes-platform
+description: A Helm chart for QES Platform - eIDAS qualified electronic signatures
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+home: https://qes-platform.com
+sources:
+  - https://github.com/company/qes-platform
+maintainers:
+  - name: QES Platform Team
+    email: platform@qes-platform.com
+keywords:
+  - eidas
+  - digital-signatures
+  - qualified-electronic-signatures
+  - multi-tenant
+  - saas
+annotations:
+  category: Security
+dependencies:
+  - name: postgresql
+    version: 12.8.2
+    repository: https://charts.bitnami.com/bitnami
+    condition: postgresql.enabled
+  - name: redis
+    version: 17.11.3
+    repository: https://charts.bitnami.com/bitnami
+    condition: redis.enabled
+  - name: vault
+    version: 0.25.0
+    repository: https://helm.releases.hashicorp.com
+    condition: vault.enabled
+  - name: grafana
+    version: 6.58.7
+    repository: https://grafana.github.io/helm-charts
+    condition: grafana.enabled
+  - name: prometheus
+    version: 23.1.0
+    repository: https://prometheus-community.github.io/helm-charts
+    condition: prometheus.enabled
+  - name: loki
+    version: 5.8.9
+    repository: https://grafana.github.io/helm-charts
+    condition: loki.enabled

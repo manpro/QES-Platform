@@ -1,0 +1,926 @@
+openapi: 3.0.3
+info:
+  title: QES Platform API
+  description: |
+    Modular eIDAS QES Digital-Signing Platform API
+    
+    This API provides qualified electronic signature services compliant with eIDAS regulation
+    and ETSI standards. Support for multiple EU countries with unified interface.
+    
+    ## Features
+    - XAdES-B, XAdES-T, XAdES-LTA signatures
+    - PAdES-B, PAdES-T, PAdES-LTA signatures  
+    - Multi-tenant SaaS architecture
+    - Country-specific QES providers (Freja eID, D-Trust, FNMT)
+    - RFC 3161 timestamping
+    - Long-term validation (LTV)
+    
+    ## Authentication
+    All API endpoints require Bearer token authentication. Obtain tokens through
+    the `/auth/login` endpoint or via OAuth2 flows.
+    
+    ## Rate Limiting
+    API requests are subject to per-tenant rate limiting:
+    - Free tier: 100 requests/hour, 20 signatures/day
+    - Professional: 1000 requests/hour, 500 signatures/day
+    - Enterprise: 10000 requests/hour, 10000 signatures/day
+    
+    Rate limit headers are included in responses:
+    - `X-RateLimit-Limit`: Request limit for current window
+    - `X-RateLimit-Remaining`: Remaining requests in current window
+    - `X-RateLimit-Reset`: Unix timestamp when window resets
+    
+  version: 1.0.0
+  contact:
+    name: QES Platform Support
+    email: support@qes-platform.com
+    url: https://docs.qes-platform.com
+  license:
+    name: Commercial License
+    url: https://qes-platform.com/license
+
+servers:
+  - url: https://api.qes-platform.com/v1
+    description: Production server
+  - url: https://staging-api.qes-platform.com/v1
+    description: Staging server
+  - url: http://localhost:8000/api/v1
+    description: Development server
+
+security:
+  - BearerAuth: []
+  - TenantHeader: []
+
+tags:
+  - name: Authentication
+    description: User authentication and authorization
+  - name: Signatures
+    description: Digital signature operations
+  - name: Certificates
+    description: Certificate management
+  - name: Verification
+    description: Signature verification
+  - name: Providers
+    description: QES provider management
+  - name: Tenants
+    description: Multi-tenant management
+  - name: Health
+    description: System health and monitoring
+
+paths:
+  # Authentication endpoints
+  /auth/login:
+    post:
+      tags: [Authentication]
+      summary: Authenticate user
+      description: |
+        Authenticate user with QES provider and obtain access token.
+        Supports multiple authentication methods depending on provider.
+      operationId: loginUser
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              freja_login:
+                summary: Freja eID Login
+                value:
+                  provider: "freja-se"
+                  user_identifier: "user@example.com"
+                  auth_method: "oauth2"
+                  redirect_uri: "https://your-app.com/callback"
+              dtrust_login:
+                summary: D-Trust Login
+                value:
+                  provider: "dtrust-de"
+                  user_identifier: "DE123456789"
+                  auth_method: "eidas"
+                  citizen_country: "DE"
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /auth/callback:
+    post:
+      tags: [Authentication]
+      summary: Handle authentication callback
+      description: Process OAuth2/SAML callback from QES provider
+      operationId: handleAuthCallback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CallbackRequest'
+      responses:
+        '200':
+          description: Callback processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthenticationResult'
+
+  /auth/refresh:
+    post:
+      tags: [Authentication]
+      summary: Refresh access token
+      operationId: refreshToken
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  description: Valid refresh token
+              required: [refresh_token]
+      responses:
+        '200':
+          description: Token refreshed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+
+  # Certificate endpoints
+  /certificates:
+    get:
+      tags: [Certificates]
+      summary: List available certificates
+      description: Get list of certificates available for signing
+      operationId: listCertificates
+      responses:
+        '200':
+          description: Certificates retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  certificates:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Certificate'
+
+  /certificates/{certificateId}:
+    get:
+      tags: [Certificates]
+      summary: Get certificate details
+      operationId: getCertificate
+      parameters:
+        - name: certificateId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Certificate details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Certificate'
+
+  # Signing endpoints
+  /sign:
+    post:
+      tags: [Signatures]
+      summary: Create digital signature
+      description: |
+        Sign a document with qualified electronic signature.
+        Supports XAdES and PAdES formats with B, T, and LTA levels.
+      operationId: signDocument
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SigningRequest'
+            encoding:
+              document:
+                contentType: application/pdf, application/xml, text/xml
+      responses:
+        '200':
+          description: Document signed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SigningResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /sign/batch:
+    post:
+      tags: [Signatures]
+      summary: Batch sign multiple documents
+      description: Sign multiple documents in a single operation
+      operationId: batchSignDocuments
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchSigningRequest'
+      responses:
+        '200':
+          description: Batch signing completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchSigningResponse'
+
+  /signatures/{signatureId}:
+    get:
+      tags: [Signatures]
+      summary: Get signature details
+      operationId: getSignature
+      parameters:
+        - name: signatureId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Signature details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SignatureInfo'
+
+    delete:
+      tags: [Signatures]
+      summary: Revoke signature
+      description: Revoke a previously created signature
+      operationId: revokeSignature
+      parameters:
+        - name: signatureId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Signature revoked successfully
+
+  # Verification endpoints
+  /verify:
+    post:
+      tags: [Verification]
+      summary: Verify digital signature
+      description: |
+        Verify the validity of a digital signature including:
+        - Certificate validity and chain
+        - Signature cryptographic validity
+        - Timestamp verification
+        - Revocation status (OCSP/CRL)
+        - Long-term validation for LTA signatures
+      operationId: verifySignature
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                signed_document:
+                  type: string
+                  format: binary
+                  description: Signed document to verify
+                original_document:
+                  type: string
+                  format: binary
+                  description: Original document (for detached signatures)
+                verification_level:
+                  type: string
+                  enum: [basic, advanced, qualified]
+                  default: qualified
+              required: [signed_document]
+      responses:
+        '200':
+          description: Verification completed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerificationResult'
+
+  # Provider endpoints
+  /providers:
+    get:
+      tags: [Providers]
+      summary: List available QES providers
+      operationId: listProviders
+      responses:
+        '200':
+          description: Available providers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProviderInfo'
+
+  /providers/{providerId}/health:
+    get:
+      tags: [Providers]
+      summary: Check provider health
+      operationId: checkProviderHealth
+      parameters:
+        - name: providerId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Provider health status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  # Tenant management
+  /tenant/settings:
+    get:
+      tags: [Tenants]
+      summary: Get tenant settings
+      operationId: getTenantSettings
+      responses:
+        '200':
+          description: Tenant settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TenantSettings'
+
+    put:
+      tags: [Tenants]
+      summary: Update tenant settings
+      operationId: updateTenantSettings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TenantSettings'
+      responses:
+        '200':
+          description: Settings updated successfully
+
+  /tenant/usage:
+    get:
+      tags: [Tenants]
+      summary: Get usage statistics
+      operationId: getTenantUsage
+      parameters:
+        - name: period
+          in: query
+          schema:
+            type: string
+            enum: [hour, day, month]
+            default: day
+      responses:
+        '200':
+          description: Usage statistics
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageStatistics'
+
+  # Health and monitoring
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /metrics:
+    get:
+      tags: [Health]
+      summary: Service metrics
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Service metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token obtained from authentication
+
+    TenantHeader:
+      type: apiKey
+      in: header
+      name: X-Tenant-ID
+      description: Tenant ID for multi-tenant access
+
+  schemas:
+    LoginRequest:
+      type: object
+      properties:
+        provider:
+          type: string
+          enum: [freja-se, dtrust-de, fnmt-es]
+          description: QES provider identifier
+        user_identifier:
+          type: string
+          description: User identifier (email, national ID, etc.)
+        auth_method:
+          type: string
+          enum: [oauth2, saml, eidas]
+          description: Authentication method
+        redirect_uri:
+          type: string
+          format: uri
+          description: Callback URI for OAuth2 flows
+        auth_params:
+          type: object
+          additionalProperties: true
+          description: Provider-specific authentication parameters
+      required: [provider, user_identifier, auth_method]
+
+    LoginResponse:
+      type: object
+      properties:
+        auth_url:
+          type: string
+          format: uri
+          description: URL for user to complete authentication
+        state:
+          type: string
+          description: State parameter for OAuth2 flows
+        session_id:
+          type: string
+          description: Session identifier
+        expires_at:
+          type: string
+          format: date-time
+          description: Authentication session expiration
+
+    CallbackRequest:
+      type: object
+      properties:
+        provider:
+          type: string
+        session_id:
+          type: string
+        callback_params:
+          type: object
+          additionalProperties: true
+      required: [provider, session_id, callback_params]
+
+    AuthenticationResult:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [authenticated, failed, pending]
+        access_token:
+          type: string
+          description: JWT access token
+        refresh_token:
+          type: string
+          description: Refresh token
+        expires_in:
+          type: integer
+          description: Token expiration in seconds
+        user_info:
+          $ref: '#/components/schemas/UserInfo'
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+        token_type:
+          type: string
+          default: Bearer
+
+    UserInfo:
+      type: object
+      properties:
+        user_id:
+          type: string
+        given_name:
+          type: string
+        family_name:
+          type: string
+        email:
+          type: string
+          format: email
+        country_code:
+          type: string
+          minLength: 2
+          maxLength: 2
+        authentication_level:
+          type: string
+          description: eIDAS assurance level
+
+    Certificate:
+      type: object
+      properties:
+        certificate_id:
+          type: string
+        subject_dn:
+          type: string
+          description: Certificate subject distinguished name
+        issuer_dn:
+          type: string
+          description: Certificate issuer distinguished name
+        serial_number:
+          type: string
+        valid_from:
+          type: string
+          format: date-time
+        valid_to:
+          type: string
+          format: date-time
+        key_usage:
+          type: array
+          items:
+            type: string
+        certificate_policies:
+          type: array
+          items:
+            type: string
+        is_qualified:
+          type: boolean
+          description: Whether certificate is qualified for QES
+
+    SigningRequest:
+      type: object
+      properties:
+        document:
+          type: string
+          format: binary
+          description: Document to sign
+        document_name:
+          type: string
+          description: Document filename
+        signature_format:
+          type: string
+          enum: [XAdES-B, XAdES-T, XAdES-LTA, PAdES-B, PAdES-T, PAdES-LTA]
+          description: Desired signature format and level
+        certificate_id:
+          type: string
+          description: Certificate to use for signing
+        timestamp_url:
+          type: string
+          format: uri
+          description: Custom timestamp authority URL
+        signature_policy:
+          type: string
+          description: Signature policy identifier
+        metadata:
+          type: object
+          additionalProperties: true
+          description: Additional metadata for signature
+      required: [document, document_name, signature_format]
+
+    SigningResponse:
+      type: object
+      properties:
+        signature_id:
+          type: string
+          format: uuid
+        signed_document:
+          type: string
+          format: binary
+          description: Signed document (base64 encoded)
+        signature_format:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        certificate_used:
+          $ref: '#/components/schemas/Certificate'
+        validation_info:
+          type: object
+          description: Validation information for LTV
+
+    BatchSigningRequest:
+      type: object
+      properties:
+        documents:
+          type: array
+          items:
+            $ref: '#/components/schemas/SigningRequest'
+          maxItems: 100
+        signature_format:
+          type: string
+          enum: [XAdES-B, XAdES-T, XAdES-LTA, PAdES-B, PAdES-T, PAdES-LTA]
+      required: [documents, signature_format]
+
+    BatchSigningResponse:
+      type: object
+      properties:
+        batch_id:
+          type: string
+          format: uuid
+        results:
+          type: array
+          items:
+            oneOf:
+              - $ref: '#/components/schemas/SigningResponse'
+              - $ref: '#/components/schemas/ErrorResponse'
+        summary:
+          type: object
+          properties:
+            total:
+              type: integer
+            successful:
+              type: integer
+            failed:
+              type: integer
+
+    SignatureInfo:
+      type: object
+      properties:
+        signature_id:
+          type: string
+          format: uuid
+        document_name:
+          type: string
+        signature_format:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        signed_by:
+          $ref: '#/components/schemas/UserInfo'
+        certificate:
+          $ref: '#/components/schemas/Certificate'
+        validation_status:
+          type: string
+          enum: [valid, invalid, unknown]
+        revocation_status:
+          type: string
+          enum: [good, revoked, unknown]
+
+    VerificationResult:
+      type: object
+      properties:
+        is_valid:
+          type: boolean
+          description: Overall signature validity
+        verification_level:
+          type: string
+          enum: [basic, advanced, qualified]
+        signature_format:
+          type: string
+        signing_time:
+          type: string
+          format: date-time
+        certificate:
+          $ref: '#/components/schemas/Certificate'
+        validation_details:
+          type: object
+          properties:
+            certificate_valid:
+              type: boolean
+            signature_intact:
+              type: boolean
+            timestamp_valid:
+              type: boolean
+            revocation_status:
+              type: string
+              enum: [good, revoked, unknown]
+            trust_status:
+              type: string
+              enum: [trusted, untrusted, unknown]
+        validation_errors:
+          type: array
+          items:
+            type: string
+        ltv_status:
+          type: object
+          description: Long-term validation status for LTA signatures
+
+    ProviderInfo:
+      type: object
+      properties:
+        provider_id:
+          type: string
+        name:
+          type: string
+        country_code:
+          type: string
+        supported_formats:
+          type: array
+          items:
+            type: string
+        authentication_methods:
+          type: array
+          items:
+            type: string
+        is_available:
+          type: boolean
+        configuration:
+          type: object
+
+    TenantSettings:
+      type: object
+      properties:
+        tenant_id:
+          type: string
+        name:
+          type: string
+        settings:
+          type: object
+          properties:
+            default_signature_format:
+              type: string
+            default_timestamp_url:
+              type: string
+            rate_limits:
+              type: object
+            enabled_providers:
+              type: array
+              items:
+                type: string
+            notification_settings:
+              type: object
+
+    UsageStatistics:
+      type: object
+      properties:
+        period:
+          type: string
+        signatures_created:
+          type: integer
+        signatures_verified:
+          type: integer
+        api_requests:
+          type: integer
+        storage_used_mb:
+          type: number
+        rate_limit_hits:
+          type: integer
+        by_provider:
+          type: object
+          additionalProperties:
+            type: object
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy, degraded]
+        timestamp:
+          type: string
+          format: date-time
+        version:
+          type: string
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+              message:
+                type: string
+              response_time_ms:
+                type: number
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+        timestamp:
+          type: string
+          format: date-time
+        trace_id:
+          type: string
+          description: Request trace ID for debugging
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    RateLimited:
+      description: Rate limit exceeded
+      headers:
+        X-RateLimit-Limit:
+          schema:
+            type: integer
+          description: Request limit
+        X-RateLimit-Remaining:
+          schema:
+            type: integer
+          description: Remaining requests
+        X-RateLimit-Reset:
+          schema:
+            type: integer
+          description: Reset timestamp
+        Retry-After:
+          schema:
+            type: integer
+          description: Seconds to wait before retry
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  examples:
+    XAdESSignature:
+      summary: XAdES-LTA XML Signature
+      description: Complete XAdES-LTA signature with timestamp and validation data
+      value:
+        signature_id: "550e8400-e29b-41d4-a716-446655440000"
+        signature_format: "XAdES-LTA"
+        timestamp: "2024-01-01T12:00:00Z"
+        certificate_used:
+          subject_dn: "CN=John Doe,O=Example Corp,C=SE"
+          issuer_dn: "CN=Test QES CA,O=Test Authority,C=SE"
+          valid_from: "2023-01-01T00:00:00Z"
+          valid_to: "2025-01-01T00:00:00Z"
+
+    PAdESSignature:
+      summary: PAdES-LTA PDF Signature
+      description: Complete PAdES-LTA PDF signature with DSS and timestamps
+      value:
+        signature_id: "550e8400-e29b-41d4-a716-446655440001"
+        signature_format: "PAdES-LTA"
+        timestamp: "2024-01-01T12:00:00Z"
+        validation_info:
+          dss_included: true
+          ocsp_responses: 2
+          crl_responses: 1
+          archive_timestamp: true

@@ -1,0 +1,216 @@
+version: '3.8'
+
+services:
+  # PostgreSQL database for multi-tenant schemas
+  postgres:
+    image: postgres:15-alpine
+    container_name: qes-postgres
+    environment:
+      POSTGRES_DB: qes_platform
+      POSTGRES_USER: qes_admin
+      POSTGRES_PASSWORD: dev_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qes_admin -d qes_platform"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis for session storage and caching
+  redis:
+    image: redis:7-alpine
+    container_name: qes-redis
+    ports:
+      - "6380:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # HashiCorp Vault for secrets management
+  vault:
+    image: hashicorp/vault:1.15
+    container_name: qes-vault
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: dev-token-please-change
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+      VAULT_ADDR: http://0.0.0.0:8200
+    ports:
+      - "8202:8200"
+    volumes:
+      - vault_data:/vault/data
+      - vault_logs:/vault/logs
+      - ./vault-config:/vault/config
+    cap_add:
+      - IPC_LOCK
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "vault", "status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # SoftHSM for development HSM simulation
+  softhsm:
+    build:
+      context: .
+      dockerfile: Dockerfile.softhsm
+    container_name: qes-softhsm
+    environment:
+      SOFTHSM2_CONF: /etc/softhsm2/softhsm2.conf
+    volumes:
+      - softhsm_tokens:/var/lib/softhsm/tokens
+      - ./softhsm-config:/etc/softhsm2
+    restart: unless-stopped
+
+  # MinIO for object storage (signed documents, audit logs)
+  minio:
+    image: minio/minio:latest
+    container_name: qes-minio
+    environment:
+      MINIO_ACCESS_KEY: admin
+      MINIO_SECRET_KEY: admin123456
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Grafana Loki for centralized logging
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: qes-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - loki_data:/loki
+      - ./loki-config:/etc/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+
+  # Prometheus for metrics collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: qes-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - prometheus_data:/prometheus
+      - ./prometheus-config:/etc/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+    restart: unless-stopped
+
+  # QES Platform Backend API
+  qes-backend:
+    build: 
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: qes-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://qes_admin:dev_password@postgres:5432/qes_platform
+      - REDIS_URL=redis://redis:6379
+      - VAULT_URL=http://vault:8200
+      - VAULT_TOKEN=dev-token-please-change
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=admin
+      - MINIO_SECRET_KEY=admin123456
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    volumes:
+      - ../backend:/app
+    networks:
+      - default
+
+  # QES Platform Frontend (React)
+  qes-frontend:
+    build:
+      context: ../ui
+      dockerfile: Dockerfile
+    container_name: qes-frontend
+    ports:
+      - "3003:3000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8000
+      - REACT_APP_VERSION=1.0.0-dev
+      - CHOKIDAR_USEPOLLING=true
+      - WATCHPACK_POLLING=true
+    depends_on:
+      - qes-backend
+    restart: unless-stopped
+    volumes:
+      - ../ui/src:/app/src
+      - ../ui/public:/app/public
+    networks:
+      - default
+
+  # Grafana for observability dashboard
+  grafana:
+    image: grafana/grafana:latest
+    container_name: qes-grafana
+    ports:
+      - "3002:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana-config:/etc/grafana/provisioning
+    restart: unless-stopped
+
+  # Jaeger for distributed tracing
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    container_name: qes-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+    environment:
+      COLLECTOR_OTLP_ENABLED: true
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  vault_data:
+  vault_logs:
+  softhsm_tokens:
+  minio_data:
+  loki_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  default:
+    name: qes-platform
+    driver: bridge

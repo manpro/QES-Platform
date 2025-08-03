@@ -1,0 +1,242 @@
+# Production values for qes-platform
+# Override default values for production deployment
+
+global:
+  storageClass: "gp3"
+  imageRegistry: "your-registry.com"
+
+# Production API Configuration
+api:
+  replicaCount: 5
+  
+  image:
+    repository: your-registry.com/qes-platform/api
+    tag: "1.0.0"
+  
+  ingress:
+    hosts:
+      - host: api.qes-platform.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: qes-platform-prod-tls
+        hosts:
+          - api.qes-platform.com
+  
+  resources:
+    limits:
+      cpu: 2000m
+      memory: 4Gi
+    requests:
+      cpu: 1000m
+      memory: 2Gi
+  
+  autoscaling:
+    minReplicas: 5
+    maxReplicas: 50
+    targetCPUUtilizationPercentage: 60
+    targetMemoryUtilizationPercentage: 70
+  
+  env:
+    - name: LOG_LEVEL
+      value: "WARNING"
+    - name: DEBUG
+      value: "false"
+    - name: ENVIRONMENT
+      value: "production"
+
+# Production PostgreSQL Configuration
+postgresql:
+  enabled: false # Use managed RDS in production
+  
+  # External database configuration
+  external:
+    enabled: true
+    host: "qes-platform-db.cluster-xxxxx.eu-west-1.rds.amazonaws.com"
+    port: 5432
+    database: "qes_platform"
+    # Credentials from AWS Secrets Manager or Vault
+
+# Production Redis Configuration
+redis:
+  enabled: false # Use managed ElastiCache in production
+  
+  external:
+    enabled: true
+    host: "qes-platform-redis.xxxxx.cache.amazonaws.com"
+    port: 6379
+
+# Production Vault Configuration
+vault:
+  server:
+    ha:
+      replicas: 5
+    
+    resources:
+      requests:
+        memory: 1Gi
+        cpu: 500m
+      limits:
+        memory: 2Gi
+        cpu: 1000m
+    
+    dataStorage:
+      size: 50Gi
+      storageClass: "gp3"
+    
+    # Enable auto-unseal with AWS KMS
+    extraEnvironmentVars:
+      AWS_REGION: "eu-west-1"
+      VAULT_AWSKMS_SEAL_KEY_ID: "arn:aws:kms:eu-west-1:123456789:key/xxxxx"
+
+# Production MinIO Configuration
+minio:
+  enabled: false # Use S3 in production
+  
+  external:
+    enabled: true
+    endpoint: "s3.eu-west-1.amazonaws.com"
+    bucket: "qes-platform-storage-prod"
+
+# Production Monitoring
+prometheus:
+  server:
+    retention: "90d"
+    persistentVolume:
+      size: 200Gi
+      storageClass: "gp3"
+    resources:
+      limits:
+        cpu: 4000m
+        memory: 8Gi
+      requests:
+        cpu: 2000m
+        memory: 4Gi
+    
+    # High availability
+    replicaCount: 2
+
+grafana:
+  persistence:
+    size: 20Gi
+    storageClass: "gp3"
+  
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  
+  # High availability
+  replicas: 2
+
+loki:
+  write:
+    replicas: 3
+    persistence:
+      size: 100Gi
+      storageClass: "gp3"
+  
+  read:
+    replicas: 3
+
+# Production External Services
+externalServices:
+  timestampAuthority:
+    external: true
+    url: "http://timestamp.digicert.com"
+    # Backup TSA
+    fallbackUrl: "http://tsa.starfieldtech.com"
+  
+  hsm:
+    type: "real-hsm"
+    realHsm:
+      enabled: true
+      pkcs11Library: "/opt/cloudhsm/lib/libcloudhsm_pkcs11.so"
+      slotId: "0"
+
+# Production Provider Configuration
+providers:
+  frejaId:
+    enabled: true
+    environment: "production"
+    endpoints:
+      oauth: "https://services.frejaeid.com/oauth2"
+      scim: "https://services.frejaeid.com/scim"
+  
+  dtrust:
+    enabled: true
+    environment: "production"
+    endpoints:
+      eidas: "https://www.d-trust.net/eidas"
+      signature: "https://api.d-trust.net/qes"
+  
+  fnmt:
+    enabled: true
+    environment: "production"
+
+# Production Security
+security:
+  networkPolicy:
+    enabled: true
+  
+  podSecurityPolicy:
+    enabled: true
+  
+  # Enable service mesh for production
+  serviceMesh:
+    enabled: true
+    mtls:
+      mode: STRICT
+
+# Production Backup
+backup:
+  enabled: true
+  schedule: "0 1 * * *" # Daily at 1 AM
+  retention: "90d"
+  
+  s3:
+    bucket: "qes-platform-backups-prod"
+    region: "eu-west-1"
+    # Cross-region replication
+    replication:
+      enabled: true
+      destinationBucket: "qes-platform-backups-backup"
+      destinationRegion: "eu-central-1"
+
+# Production Multi-tenancy
+multiTenancy:
+  isolation:
+    database: "schema"
+    networking: "namespace"
+
+# Production Compliance
+compliance:
+  auditLogging:
+    enabled: true
+    retention: "10y"
+  
+  gdpr:
+    enabled: true
+    encryption:
+      enabled: true
+      kmsKeyId: "arn:aws:kms:eu-west-1:123456789:key/gdpr-key"
+  
+  eidas:
+    enabled: true
+    validationLevel: "qualified"
+    archiveTimestamps: true
+    ltv:
+      enabled: true
+      retention: "30y"
+
+# Resource quotas and limits
+resourceQuotas:
+  enabled: true
+  cpu: "20"
+  memory: "40Gi"
+  storage: "1Ti"
+  persistentVolumeClaims: "50"

@@ -1,0 +1,52 @@
+# ZAP Scanning Rules Configuration for QES Platform
+# Format: RULE_ID	THRESHOLD	[PARAMETER]
+
+# Ignore false positives for development environment
+10021	OFF	# X-Content-Type-Options Header Missing (dev environment)
+10020	OFF	# X-Frame-Options Header Not Set (dev environment) 
+10016	OFF	# Web Browser XSS Protection Not Enabled (dev environment)
+
+# High severity rules - always enabled
+40018	HIGH	# SQL Injection
+40019	HIGH	# SQL Injection - MySQL
+40020	HIGH	# SQL Injection - Hypersonic SQL
+40021	HIGH	# SQL Injection - Oracle
+40022	HIGH	# SQL Injection - PostgreSQL
+
+# Authentication and session management
+10011	MEDIUM	# Cookie Without Secure Flag
+10015	MEDIUM	# Incomplete or No Cache-control and Pragma HTTP Header Set
+10017	MEDIUM	# Cross-Domain JavaScript Source File Inclusion
+10049	MEDIUM	# Storable and Cacheable Content
+
+# Cryptographic security
+90033	HIGH	# Loosely Scoped Cookie
+10063	MEDIUM	# Feature Policy Header Not Set
+10038	MEDIUM	# Content Security Policy (CSP) Header Not Set
+
+# API security specific rules
+10023	MEDIUM	# Information Disclosure - Debug Error Messages
+10024	MEDIUM	# Information Disclosure - Sensitive Information in URL
+10025	MEDIUM	# Information Disclosure - Sensitive Information in HTTP Referrer Header
+
+# Input validation
+40012	HIGH	# Cross Site Scripting (Reflected)
+40014	HIGH	# Cross Site Scripting (Persistent)
+40016	HIGH	# Cross Site Scripting (Persistent) - Prime
+40017	HIGH	# Cross Site Scripting (Persistent) - Spider
+
+# Business logic
+20015	MEDIUM	# Heartbleed OpenSSL Vulnerability
+20014	HIGH	# HTTP Parameter Pollution
+
+# Custom QES Platform rules
+# Exclude health check endpoints from certain scans
+EXCLUDE	/health
+EXCLUDE	/metrics
+EXCLUDE	/favicon.ico
+
+# Include API endpoints that should be thoroughly tested
+INCLUDE	/api/v1/auth/*
+INCLUDE	/api/v1/sign/*
+INCLUDE	/api/v1/verify/*
+INCLUDE	/api/v1/certificates/*

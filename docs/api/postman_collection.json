@@ -1,0 +1,683 @@
+{
+  "info": {
+    "name": "QES Platform API",
+    "description": "Complete API collection for QES Platform with eIDAS qualified electronic signatures",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://api.qes-platform.com/v1",
+      "type": "string"
+    },
+    {
+      "key": "tenant_id",
+      "value": "your-tenant-id",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Login with Freja eID",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"freja-se\",\n  \"user_identifier\": \"user@example.com\",\n  \"auth_method\": \"oauth2\",\n  \"redirect_uri\": \"https://your-app.com/callback\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Initiate authentication with Freja eID (Sweden)"
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"provider\": \"freja-se\",\n  \"user_identifier\": \"user@example.com\",\n  \"auth_method\": \"oauth2\",\n  \"redirect_uri\": \"https://your-app.com/callback\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/login",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "login"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"auth_url\": \"https://services.test.frejaeid.com/oauth2/authorize?client_id=...\",\n  \"state\": \"abc123\",\n  \"session_id\": \"sess_550e8400-e29b-41d4-a716-446655440000\",\n  \"expires_at\": \"2024-01-01T13:00:00Z\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "Login with D-Trust",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "{{tenant_id}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"dtrust-de\",\n  \"user_identifier\": \"DE123456789\",\n  \"auth_method\": \"eidas\",\n  \"citizen_country\": \"DE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "login"]
+            },
+            "description": "Initiate authentication with D-Trust eIDAS (Germany)"
+          }
+        },
+        {
+          "name": "Handle Auth Callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"freja-se\",\n  \"session_id\": \"sess_550e8400-e29b-41d4-a716-446655440000\",\n  \"callback_params\": {\n    \"code\": \"auth_code_from_provider\",\n    \"state\": \"abc123\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/callback",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "callback"]
+            },
+            "description": "Process OAuth2/SAML callback from QES provider"
+          },
+          "response": [
+            {
+              "name": "Authentication Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"provider\": \"freja-se\",\n  \"session_id\": \"sess_550e8400-e29b-41d4-a716-446655440000\",\n  \"callback_params\": {\n    \"code\": \"auth_code_from_provider\",\n    \"state\": \"abc123\"\n  }\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/auth/callback",
+                  "host": ["{{base_url}}"],
+                  "path": ["auth", "callback"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"authenticated\",\n  \"access_token\": \"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...\",\n  \"refresh_token\": \"refresh_token_here\",\n  \"expires_in\": 3600,\n  \"user_info\": {\n    \"user_id\": \"user_550e8400-e29b-41d4-a716-446655440000\",\n    \"given_name\": \"John\",\n    \"family_name\": \"Doe\",\n    \"email\": \"john.doe@example.com\",\n    \"country_code\": \"SE\",\n    \"authentication_level\": \"substantial\"\n  }\n}"
+            }
+          ],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (responseCode.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set('access_token', jsonData.access_token);",
+                  "    pm.environment.set('refresh_token', jsonData.refresh_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "refresh"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Certificates",
+      "item": [
+        {
+          "name": "List Certificates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/certificates",
+              "host": ["{{base_url}}"],
+              "path": ["certificates"]
+            },
+            "description": "Get list of available certificates for signing"
+          },
+          "response": [
+            {
+              "name": "Success",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/certificates",
+                  "host": ["{{base_url}}"],
+                  "path": ["certificates"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"certificates\": [\n    {\n      \"certificate_id\": \"cert_550e8400-e29b-41d4-a716-446655440000\",\n      \"subject_dn\": \"CN=John Doe,O=Example Corp,C=SE\",\n      \"issuer_dn\": \"CN=Freja eID QES CA 1,O=Freja eID,C=SE\",\n      \"serial_number\": \"123456789\",\n      \"valid_from\": \"2023-01-01T00:00:00Z\",\n      \"valid_to\": \"2025-01-01T00:00:00Z\",\n      \"key_usage\": [\"digital_signature\", \"non_repudiation\"],\n      \"certificate_policies\": [\"1.2.3.4.5.6.7.8\"],\n      \"is_qualified\": true\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Get Certificate Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/certificates/cert_550e8400-e29b-41d4-a716-446655440000",
+              "host": ["{{base_url}}"],
+              "path": ["certificates", "cert_550e8400-e29b-41d4-a716-446655440000"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Digital Signatures",
+      "item": [
+        {
+          "name": "Sign XML Document (XAdES-LTA)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "document",
+                  "type": "file",
+                  "src": "sample.xml"
+                },
+                {
+                  "key": "document_name",
+                  "value": "contract.xml",
+                  "type": "text"
+                },
+                {
+                  "key": "signature_format",
+                  "value": "XAdES-LTA",
+                  "type": "text"
+                },
+                {
+                  "key": "certificate_id",
+                  "value": "cert_550e8400-e29b-41d4-a716-446655440000",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/sign",
+              "host": ["{{base_url}}"],
+              "path": ["sign"]
+            },
+            "description": "Sign an XML document with XAdES-LTA format"
+          },
+          "response": [
+            {
+              "name": "Signature Success",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "document",
+                      "type": "file",
+                      "src": "sample.xml"
+                    },
+                    {
+                      "key": "signature_format",
+                      "value": "XAdES-LTA",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/sign",
+                  "host": ["{{base_url}}"],
+                  "path": ["sign"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"signature_id\": \"sig_550e8400-e29b-41d4-a716-446655440000\",\n  \"signed_document\": \"PD94bWwgdmVyc2lvbj0iMS4wIj8+...\",\n  \"signature_format\": \"XAdES-LTA\",\n  \"timestamp\": \"2024-01-01T12:00:00Z\",\n  \"certificate_used\": {\n    \"subject_dn\": \"CN=John Doe,O=Example Corp,C=SE\",\n    \"issuer_dn\": \"CN=Freja eID QES CA 1,O=Freja eID,C=SE\",\n    \"valid_from\": \"2023-01-01T00:00:00Z\",\n    \"valid_to\": \"2025-01-01T00:00:00Z\",\n    \"is_qualified\": true\n  },\n  \"validation_info\": {\n    \"certificate_values_included\": true,\n    \"revocation_values_included\": true,\n    \"archive_timestamp_included\": true\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Sign PDF Document (PAdES-LTA)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "document",
+                  "type": "file",
+                  "src": "contract.pdf"
+                },
+                {
+                  "key": "document_name",
+                  "value": "contract.pdf",
+                  "type": "text"
+                },
+                {
+                  "key": "signature_format",
+                  "value": "PAdES-LTA",
+                  "type": "text"
+                },
+                {
+                  "key": "certificate_id",
+                  "value": "cert_550e8400-e29b-41d4-a716-446655440000",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/sign",
+              "host": ["{{base_url}}"],
+              "path": ["sign"]
+            },
+            "description": "Sign a PDF document with PAdES-LTA format"
+          }
+        },
+        {
+          "name": "Batch Sign Documents",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signature_format\": \"XAdES-T\",\n  \"documents\": [\n    {\n      \"document\": \"base64_encoded_document_1\",\n      \"document_name\": \"contract1.xml\",\n      \"certificate_id\": \"cert_550e8400-e29b-41d4-a716-446655440000\"\n    },\n    {\n      \"document\": \"base64_encoded_document_2\",\n      \"document_name\": \"contract2.xml\",\n      \"certificate_id\": \"cert_550e8400-e29b-41d4-a716-446655440000\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/sign/batch",
+              "host": ["{{base_url}}"],
+              "path": ["sign", "batch"]
+            },
+            "description": "Sign multiple documents in batch"
+          }
+        },
+        {
+          "name": "Get Signature Details",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/signatures/sig_550e8400-e29b-41d4-a716-446655440000",
+              "host": ["{{base_url}}"],
+              "path": ["signatures", "sig_550e8400-e29b-41d4-a716-446655440000"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Verification",
+      "item": [
+        {
+          "name": "Verify Signed Document",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "signed_document",
+                  "type": "file",
+                  "src": "signed_contract.pdf"
+                },
+                {
+                  "key": "verification_level",
+                  "value": "qualified",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/verify",
+              "host": ["{{base_url}}"],
+              "path": ["verify"]
+            },
+            "description": "Verify a digitally signed document"
+          },
+          "response": [
+            {
+              "name": "Verification Result",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "signed_document",
+                      "type": "file",
+                      "src": "signed_contract.pdf"
+                    },
+                    {
+                      "key": "verification_level",
+                      "value": "qualified",
+                      "type": "text"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{base_url}}/verify",
+                  "host": ["{{base_url}}"],
+                  "path": ["verify"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"is_valid\": true,\n  \"verification_level\": \"qualified\",\n  \"signature_format\": \"PAdES-LTA\",\n  \"signing_time\": \"2024-01-01T12:00:00Z\",\n  \"certificate\": {\n    \"subject_dn\": \"CN=John Doe,O=Example Corp,C=SE\",\n    \"issuer_dn\": \"CN=Freja eID QES CA 1,O=Freja eID,C=SE\",\n    \"is_qualified\": true\n  },\n  \"validation_details\": {\n    \"certificate_valid\": true,\n    \"signature_intact\": true,\n    \"timestamp_valid\": true,\n    \"revocation_status\": \"good\",\n    \"trust_status\": \"trusted\"\n  },\n  \"validation_errors\": [],\n  \"ltv_status\": {\n    \"ltv_enabled\": true,\n    \"validation_data_available\": true,\n    \"archive_timestamp_valid\": true\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Providers",
+      "item": [
+        {
+          "name": "List QES Providers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/providers",
+              "host": ["{{base_url}}"],
+              "path": ["providers"]
+            }
+          },
+          "response": [
+            {
+              "name": "Available Providers",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/providers",
+                  "host": ["{{base_url}}"],
+                  "path": ["providers"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"providers\": [\n    {\n      \"provider_id\": \"freja-se\",\n      \"name\": \"Freja eID QES\",\n      \"country_code\": \"SE\",\n      \"supported_formats\": [\"XAdES-B\", \"XAdES-T\", \"XAdES-LTA\", \"PAdES-B\", \"PAdES-T\", \"PAdES-LTA\"],\n      \"authentication_methods\": [\"oauth2\"],\n      \"is_available\": true\n    },\n    {\n      \"provider_id\": \"dtrust-de\",\n      \"name\": \"D-Trust QES\",\n      \"country_code\": \"DE\",\n      \"supported_formats\": [\"XAdES-B\", \"XAdES-T\", \"XAdES-LTA\", \"PAdES-B\", \"PAdES-T\", \"PAdES-LTA\"],\n      \"authentication_methods\": [\"eidas\", \"saml\"],\n      \"is_available\": true\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "Check Provider Health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/providers/freja-se/health",
+              "host": ["{{base_url}}"],
+              "path": ["providers", "freja-se", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tenant Management",
+      "item": [
+        {
+          "name": "Get Tenant Settings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tenant/settings",
+              "host": ["{{base_url}}"],
+              "path": ["tenant", "settings"]
+            }
+          }
+        },
+        {
+          "name": "Update Tenant Settings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"settings\": {\n    \"default_signature_format\": \"XAdES-LTA\",\n    \"default_timestamp_url\": \"http://timestamp.digicert.com\",\n    \"enabled_providers\": [\"freja-se\", \"dtrust-de\"],\n    \"rate_limits\": {\n      \"signatures_per_hour\": {\n        \"limit\": 100,\n        \"window_seconds\": 3600\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/tenant/settings",
+              "host": ["{{base_url}}"],
+              "path": ["tenant", "settings"]
+            }
+          }
+        },
+        {
+          "name": "Get Usage Statistics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/tenant/usage?period=day",
+              "host": ["{{base_url}}"],
+              "path": ["tenant", "usage"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "day"
+                }
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "Usage Stats",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/tenant/usage?period=day",
+                  "host": ["{{base_url}}"],
+                  "path": ["tenant", "usage"],
+                  "query": [
+                    {
+                      "key": "period",
+                      "value": "day"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"period\": \"day\",\n  \"signatures_created\": 45,\n  \"signatures_verified\": 12,\n  \"api_requests\": 234,\n  \"storage_used_mb\": 15.7,\n  \"rate_limit_hits\": 0,\n  \"by_provider\": {\n    \"freja-se\": {\n      \"signatures\": 30,\n      \"verifications\": 8\n    },\n    \"dtrust-de\": {\n      \"signatures\": 15,\n      \"verifications\": 4\n    }\n  }\n}"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Health & Monitoring",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["health"]
+            },
+            "description": "Check service health status"
+          },
+          "response": [
+            {
+              "name": "Healthy",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/health",
+                  "host": ["{{base_url}}"],
+                  "path": ["health"]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [],
+              "cookie": [],
+              "body": "{\n  \"status\": \"healthy\",\n  \"timestamp\": \"2024-01-01T12:00:00Z\",\n  \"version\": \"1.0.0\",\n  \"checks\": {\n    \"database\": {\n      \"status\": \"healthy\",\n      \"message\": \"Connected\",\n      \"response_time_ms\": 5\n    },\n    \"redis\": {\n      \"status\": \"healthy\",\n      \"message\": \"Connected\",\n      \"response_time_ms\": 2\n    },\n    \"vault\": {\n      \"status\": \"healthy\",\n      \"message\": \"Unsealed and accessible\",\n      \"response_time_ms\": 8\n    },\n    \"providers\": {\n      \"status\": \"healthy\",\n      \"message\": \"All providers available\",\n      \"response_time_ms\": 150\n    }\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "Service Metrics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["metrics"]
+            },
+            "description": "Get Prometheus metrics"
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Set tenant header for all requests",
+          "if (pm.variables.get('tenant_id')) {",
+          "    pm.request.headers.add({",
+          "        key: 'X-Tenant-ID',",
+          "        value: pm.variables.get('tenant_id')",
+          "    });",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test for rate limiting headers",
+          "if (pm.response.headers.has('X-RateLimit-Limit')) {",
+          "    pm.test('Rate limiting headers present', function () {",
+          "        pm.expect(pm.response.headers.get('X-RateLimit-Limit')).to.not.be.undefined;",
+          "        pm.expect(pm.response.headers.get('X-RateLimit-Remaining')).to.not.be.undefined;",
+          "        pm.expect(pm.response.headers.get('X-RateLimit-Reset')).to.not.be.undefined;",
+          "    });",
+          "}"
+        ]
+      }
+    }
+  ]
+}

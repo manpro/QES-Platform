@@ -1,0 +1,158 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "qes-platform.fullname" . }}-api
+  labels:
+    {{- include "qes-platform.labels" . | nindent 4 }}
+    app.kubernetes.io/component: api
+spec:
+  {{- if not .Values.api.autoscaling.enabled }}
+  replicas: {{ .Values.api.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "qes-platform.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: api
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+      labels:
+        {{- include "qes-platform.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: api
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "qes-platform.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.api.securityContext | nindent 8 }}
+      initContainers:
+        - name: wait-for-db
+          image: postgres:15-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h {{ include "qes-platform.postgresql.host" . }} -p {{ include "qes-platform.postgresql.port" . }}; do
+                echo "Waiting for database..."
+                sleep 2
+              done
+        - name: wait-for-redis
+          image: redis:7-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until redis-cli -h {{ include "qes-platform.redis.host" . }} -p {{ include "qes-platform.redis.port" . }} ping; do
+                echo "Waiting for Redis..."
+                sleep 2
+              done
+        - name: wait-for-vault
+          image: vault:1.14
+          command:
+            - sh
+            - -c
+            - |
+              until vault status -address=http://{{ include "qes-platform.vault.host" . }}:8200; do
+                echo "Waiting for Vault..."
+                sleep 5
+              done
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ include "qes-platform.image" . }}"
+          imagePullPolicy: {{ .Values.api.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.api.service.targetPort }}
+              protocol: TCP
+          env:
+            - name: POSTGRES_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@{{ include "qes-platform.postgresql.host" . }}:{{ include "qes-platform.postgresql.port" . }}/{{ include "qes-platform.postgresql.database" . }}"
+            - name: REDIS_URL
+              value: "redis://{{ include "qes-platform.redis.host" . }}:{{ include "qes-platform.redis.port" . }}/0"
+            - name: VAULT_URL
+              value: "http://{{ include "qes-platform.vault.host" . }}:8200"
+            - name: MINIO_ENDPOINT
+              value: "{{ include "qes-platform.minio.host" . }}:9000"
+            {{- if .Values.externalServices.hsm.softhsm.enabled }}
+            - name: HSM_PKCS11_LIB
+              value: "/usr/lib/softhsm/libsofthsm2.so"
+            - name: HSM_TOKEN_LABEL
+              value: "{{ .Values.externalServices.hsm.softhsm.tokenLabel }}"
+            {{- else if .Values.externalServices.hsm.realHsm.enabled }}
+            - name: HSM_PKCS11_LIB
+              value: "{{ .Values.externalServices.hsm.realHsm.pkcs11Library }}"
+            - name: HSM_SLOT_ID
+              value: "{{ .Values.externalServices.hsm.realHsm.slotId }}"
+            {{- end }}
+            - name: TSA_URL
+              value: "{{ .Values.externalServices.timestampAuthority.url }}"
+            {{- range .Values.api.env }}
+            - name: {{ .name }}
+              value: {{ .value | quote }}
+            {{- end }}
+          {{- with .Values.api.envFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            {{- toYaml .Values.api.livenessProbe | nindent 12 }}
+          readinessProbe:
+            {{- toYaml .Values.api.readinessProbe | nindent 12 }}
+          resources:
+            {{- toYaml .Values.api.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: var-run
+              mountPath: /var/run
+            {{- if .Values.externalServices.hsm.softhsm.enabled }}
+            - name: softhsm-config
+              mountPath: /etc/softhsm2
+            - name: softhsm-tokens
+              mountPath: /var/lib/softhsm/tokens
+            {{- end }}
+        {{- if .Values.externalServices.hsm.softhsm.enabled }}
+        - name: softhsm
+          image: "{{ .Values.externalServices.hsm.softhsm.image.repository }}:{{ .Values.externalServices.hsm.softhsm.image.tag }}"
+          command: ["sleep", "infinity"]
+          volumeMounts:
+            - name: softhsm-config
+              mountPath: /etc/softhsm2
+            - name: softhsm-tokens
+              mountPath: /var/lib/softhsm/tokens
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: var-run
+          emptyDir: {}
+        {{- if .Values.externalServices.hsm.softhsm.enabled }}
+        - name: softhsm-config
+          configMap:
+            name: {{ include "qes-platform.fullname" . }}-softhsm-config
+        - name: softhsm-tokens
+          emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

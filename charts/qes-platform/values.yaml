@@ -1,0 +1,510 @@
+# Default values for qes-platform
+# This is a YAML-formatted file.
+
+global:
+  # Global configuration
+  storageClass: ""
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# QES Platform API Configuration
+api:
+  replicaCount: 3
+  
+  image:
+    repository: qes-platform/api
+    pullPolicy: IfNotPresent
+    tag: "1.0.0"
+  
+  service:
+    type: ClusterIP
+    port: 8000
+    targetPort: 8000
+    annotations: {}
+  
+  ingress:
+    enabled: true
+    className: "nginx"
+    annotations:
+      nginx.ingress.kubernetes.io/ssl-redirect: "true"
+      nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+      cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    hosts:
+      - host: api.qes-platform.com
+        paths:
+          - path: /
+            pathType: Prefix
+    tls:
+      - secretName: qes-platform-tls
+        hosts:
+          - api.qes-platform.com
+  
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+    requests:
+      cpu: 500m
+      memory: 1Gi
+  
+  autoscaling:
+    enabled: true
+    minReplicas: 3
+    maxReplicas: 20
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  
+  # Environment variables
+  env:
+    - name: LOG_LEVEL
+      value: "INFO"
+    - name: DEBUG
+      value: "false"
+    - name: RATE_LIMIT_ENABLED
+      value: "true"
+    - name: RATE_LIMIT_DEFAULT_TIER
+      value: "professional"
+  
+  # Secrets (injected from Vault or Kubernetes secrets)
+  envFrom:
+    - secretRef:
+        name: qes-platform-secrets
+  
+  # Health checks
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  
+  readinessProbe:
+    httpGet:
+      path: /health
+      port: 8000
+    initialDelaySeconds: 5
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+  
+  # Security context
+  securityContext:
+    runAsNonRoot: true
+    runAsUser: 1000
+    fsGroup: 1000
+    capabilities:
+      drop:
+        - ALL
+    readOnlyRootFilesystem: true
+  
+  # Pod disruption budget
+  podDisruptionBudget:
+    enabled: true
+    minAvailable: 1
+
+# PostgreSQL Database Configuration
+postgresql:
+  enabled: true
+  auth:
+    enablePostgresUser: true
+    postgresPassword: "qes-postgres-password"
+    username: "qes_user"
+    password: "qes-user-password"
+    database: "qes_platform"
+  
+  architecture: replication
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+      storageClass: ""
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+  
+  readReplicas:
+    replicaCount: 1
+    persistence:
+      enabled: true
+      size: 20Gi
+    resources:
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+      requests:
+        cpu: 500m
+        memory: 1Gi
+  
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+# Redis Configuration
+redis:
+  enabled: true
+  architecture: replication
+  auth:
+    enabled: true
+    password: "redis-password"
+  
+  master:
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+  
+  replica:
+    replicaCount: 1
+    persistence:
+      enabled: true
+      size: 8Gi
+    resources:
+      limits:
+        cpu: 500m
+        memory: 1Gi
+      requests:
+        cpu: 250m
+        memory: 512Mi
+  
+  metrics:
+    enabled: true
+    serviceMonitor:
+      enabled: true
+
+# HashiCorp Vault Configuration
+vault:
+  enabled: true
+  server:
+    ha:
+      enabled: true
+      replicas: 3
+      raft:
+        enabled: true
+        setNodeId: true
+        config: |
+          ui = true
+          
+          listener "tcp" {
+            tls_disable = 1
+            address = "[::]:8200"
+            cluster_address = "[::]:8201"
+          }
+          
+          storage "raft" {
+            path = "/vault/data"
+          }
+          
+          service_registration "kubernetes" {}
+    
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 250m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+    
+    dataStorage:
+      enabled: true
+      size: 10Gi
+      storageClass: ""
+    
+    extraEnvironmentVars:
+      VAULT_CACERT: /vault/userconfig/vault-server-tls/vault.ca
+    
+    extraVolumes:
+      - type: secret
+        name: vault-server-tls
+  
+  injector:
+    enabled: true
+    resources:
+      requests:
+        memory: 256Mi
+        cpu: 250m
+      limits:
+        memory: 512Mi
+        cpu: 500m
+
+# MinIO Object Storage
+minio:
+  enabled: true
+  mode: distributed
+  replicas: 4
+  
+  auth:
+    rootUser: "admin"
+    rootPassword: "minio-secret-key"
+  
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+  
+  resources:
+    requests:
+      memory: 512Mi
+      cpu: 250m
+    limits:
+      memory: 1Gi
+      cpu: 500m
+  
+  metrics:
+    serviceMonitor:
+      enabled: true
+
+# Monitoring Stack
+prometheus:
+  enabled: true
+  server:
+    retention: "30d"
+    persistentVolume:
+      enabled: true
+      size: 50Gi
+    resources:
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+      requests:
+        cpu: 1000m
+        memory: 2Gi
+  
+  alertmanager:
+    enabled: true
+    persistentVolume:
+      enabled: true
+      size: 2Gi
+
+grafana:
+  enabled: true
+  admin:
+    user: admin
+    password: "grafana-admin-password"
+  
+  persistence:
+    enabled: true
+    size: 10Gi
+  
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  
+  # Pre-configured dashboards
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+      - name: 'qes-platform'
+        orgId: 1
+        folder: 'QES Platform'
+        type: file
+        disableDeletion: false
+        editable: true
+        options:
+          path: /var/lib/grafana/dashboards/qes-platform
+  
+  dashboards:
+    qes-platform:
+      qes-overview:
+        file: dashboards/qes-overview.json
+      qes-performance:
+        file: dashboards/qes-performance.json
+
+loki:
+  enabled: true
+  loki:
+    commonConfig:
+      replication_factor: 1
+    storage:
+      type: 'filesystem'
+    schemaConfig:
+      configs:
+        - from: 2020-10-24
+          store: boltdb-shipper
+          object_store: filesystem
+          schema: v11
+          index:
+            prefix: index_
+            period: 24h
+  
+  gateway:
+    enabled: true
+    replicas: 1
+  
+  write:
+    replicas: 1
+    persistence:
+      size: 10Gi
+  
+  read:
+    replicas: 1
+
+# External Services Configuration
+externalServices:
+  # Timestamp Authority Configuration
+  timestampAuthority:
+    # Use external TSA or internal mock for development
+    external: true
+    url: "http://timestamp.digicert.com"
+    # For internal TSA
+    mock:
+      enabled: false
+      image:
+        repository: qes-platform/mock-tsa
+        tag: "latest"
+  
+  # HSM Configuration
+  hsm:
+    # Use real HSM in production, SoftHSM for development
+    type: "softhsm" # or "real-hsm"
+    softhsm:
+      enabled: true
+      image:
+        repository: qes-platform/softhsm
+        tag: "latest"
+      tokenLabel: "QES-DEV-TOKEN"
+      soPin: "1234"
+      userPin: "5678"
+    realHsm:
+      enabled: false
+      pkcs11Library: "/usr/lib/cloudhsm/libcloudhsm_pkcs11.so"
+      slotId: "0"
+
+# QES Provider Adapters Configuration
+providers:
+  # Freja eID (Sweden)
+  frejaId:
+    enabled: true
+    environment: "test" # or "production"
+    endpoints:
+      oauth: "https://services.test.frejaeid.com/oauth2"
+      scim: "https://services.test.frejaeid.com/scim"
+    # Secrets injected via Vault or Kubernetes secrets
+  
+  # D-Trust (Germany)
+  dtrust:
+    enabled: true
+    environment: "test" # or "production"
+    endpoints:
+      eidas: "https://www.d-trust.net/eidas"
+      signature: "https://api.d-trust.net/qes"
+  
+  # FNMT (Spain) - Optional
+  fnmt:
+    enabled: false
+    environment: "test"
+
+# Security Configuration
+security:
+  # Network Policies
+  networkPolicy:
+    enabled: true
+    ingress:
+      enabled: true
+    egress:
+      enabled: true
+  
+  # Pod Security Policy
+  podSecurityPolicy:
+    enabled: true
+  
+  # Service Mesh (Istio)
+  serviceMesh:
+    enabled: false
+    mtls:
+      mode: STRICT
+
+# Backup Configuration
+backup:
+  enabled: true
+  schedule: "0 2 * * *" # Daily at 2 AM
+  retention: "30d"
+  
+  s3:
+    bucket: "qes-platform-backups"
+    region: "eu-west-1"
+    # Access credentials via Vault or IAM roles
+  
+  postgresql:
+    enabled: true
+  
+  vault:
+    enabled: true
+  
+  minio:
+    enabled: true
+
+# Development/Testing Configuration
+development:
+  # Mock external services for testing
+  mockServices:
+    enabled: false
+    providers:
+      freja: true
+      dtrust: true
+  
+  # Sample data initialization
+  sampleData:
+    enabled: false
+    tenants:
+      - name: "Demo Tenant"
+        subdomain: "demo"
+        users: 10
+        signatures: 100
+
+# Multi-tenancy Configuration
+multiTenancy:
+  # Default tenant settings
+  defaultTenant:
+    name: "Default Tenant"
+    subdomain: "default"
+    rateLimits:
+      tier: "professional"
+      signatures_per_hour: 100
+      requests_per_hour: 1000
+  
+  # Tenant isolation
+  isolation:
+    database: "schema" # or "database"
+    networking: "namespace" # or "none"
+
+# Compliance and Auditing
+compliance:
+  # Audit logging
+  auditLogging:
+    enabled: true
+    destinations:
+      - loki
+      - postgresql
+    retention: "7y"
+  
+  # GDPR compliance
+  gdpr:
+    enabled: true
+    dataRetention:
+      userLogs: "3y"
+      signatures: "10y"
+      personalData: "until-deletion+30d"
+  
+  # eIDAS compliance
+  eidas:
+    enabled: true
+    validationLevel: "qualified"
+    archiveTimestamps: true

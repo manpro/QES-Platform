@@ -1,0 +1,84 @@
+# Freja eID Provider Configuration Example
+# This file shows how to configure Freja eID QES provider
+
+# QES Platform API connection
+api_url: https://api.qes-platform.com/v1
+tenant_id: your-tenant-id
+api_key: your-api-key
+
+# Provider configurations
+providers:
+  freja-se:
+    # Provider identification
+    name: freja-se
+    type: freja-eid
+    country: SE
+    environment: production  # or "test" for sandbox
+    enabled: true
+    
+    # Freja eID endpoints
+    endpoints:
+      oauth: https://services.frejaeid.com/oauth2
+      scim: https://services.frejaeid.com/scim
+      
+    # OAuth2 configuration
+    client_id: your-freja-client-id
+    client_secret: your-freja-client-secret
+    
+    # Freja eID specific settings
+    config:
+      # Minimum level of assurance required
+      min_loa: EXTENDED
+      
+      # Allowed authentication methods
+      auth_methods:
+        - FREJAEID_PLUS
+        - ORG_ID
+      
+      # Certificate request settings
+      certificate:
+        key_length: 2048
+        validity_period: 365  # days
+        
+      # Signature settings
+      signature:
+        hash_algorithm: SHA256
+        timestamp_required: true
+        
+      # User attributes to request
+      user_attributes:
+        - given_name
+        - family_name
+        - email
+        - national_id
+        - address
+        
+      # Organization settings (for organizational certificates)
+      organization:
+        request_org_certificates: true
+        allowed_org_types:
+          - COMPANY
+          - GOVERNMENT
+          - MUNICIPALITY
+
+# Global settings
+settings:
+  default_signature_format: PAdES-LTA
+  timeout: 60s  # Longer timeout for Freja eID operations
+  
+  # Sweden-specific settings
+  locale: sv-SE
+  timezone: Europe/Stockholm
+  
+  # Freja eID integration settings
+  freja:
+    # Callback URL for OAuth2 flow
+    callback_url: https://your-app.com/auth/freja/callback
+    
+    # User experience settings
+    ui_locale: sv
+    mobile_app_required: false
+    
+    # Security settings
+    force_approval: true
+    session_timeout: 300  # 5 minutes

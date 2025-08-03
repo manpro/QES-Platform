@@ -1,0 +1,25 @@
+FROM alpine:3.18
+
+# Install SoftHSM2 and dependencies
+RUN apk add --no-cache \
+    softhsm \
+    openssl \
+    openssl-dev \
+    p11-kit \
+    p11-kit-dev \
+    && mkdir -p /var/lib/softhsm/tokens \
+    && mkdir -p /etc/softhsm2
+
+# Copy SoftHSM configuration
+COPY softhsm-config/softhsm2.conf /etc/softhsm2/
+
+# Initialize token slot
+RUN softhsm2-util --init-token --slot 0 --label "QES-DEV-TOKEN" \
+    --so-pin 1234 --pin 5678
+
+# Expose PKCS#11 library path
+ENV SOFTHSM2_CONF=/etc/softhsm2/softhsm2.conf
+ENV PKCS11_LIB=/usr/lib/softhsm/libsofthsm2.so
+
+# Keep container running
+CMD ["tail", "-f", "/dev/null"]
