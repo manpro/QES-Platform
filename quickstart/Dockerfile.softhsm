@@ -1,4 +1,4 @@
-FROM alpine:3.18
+FROM alpine:3.22
 
 # Install SoftHSM2 and dependencies
 RUN apk add --no-cache \
